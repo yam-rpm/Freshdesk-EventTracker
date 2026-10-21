@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Freshdesk-EventTracker/Freshdesk_EventTracker.BusinessLogic/Freshdesk_EventTracker.BusinessLogic.csproj" />
+  <Project Path="Freshdesk-EventTracker/Freshdesk_EventTracker.Shared/Freshdesk_EventTracker.Shared.csproj" />
+  <Project Path="Freshdesk-EventTracker/Freshdesk_EventTracker.xUnit/Freshdesk_EventTracker.xUnit.csproj" />
+  <Project Path="Freshdesk-EventTracker/Freshdesk_EventTracker/Freshdesk_EventTracker.csproj" />
+</Solution>
