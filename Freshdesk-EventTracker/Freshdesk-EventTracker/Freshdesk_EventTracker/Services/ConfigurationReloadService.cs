@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Collections;
 
-namespace ConsoleSolution1.Services
+namespace Freshdesk_EventTracker.Services
 {
     public class ConfigurationReloadService : IConfigurationReloadService
     {
@@ -28,13 +28,18 @@ namespace ConsoleSolution1.Services
         /// <param name="serviceProvider">The application's <see cref="IServiceProvider"/> for resolving services.</param>
         /// <param name="serviceCollectionHolder">Holds the registered service collection for dynamic access.</param>
         public ConfigurationReloadService(IConfiguration configurationRoot, IConfiguration configuration, IServiceProvider serviceProvider
-          , ServiceCollectionHolder serviceCollectionHolder)
+          ,ServiceCollectionHolder serviceCollectionHolder)
         {
             _Configuration = configuration;
             _ServiceProvider = serviceProvider;
             _ServiceCollectionHolder = serviceCollectionHolder;
         }
 
+        public sealed class FreshdeskOptions
+        {
+            public string BaseUrl { get; set; } = string.Empty;
+            public string ApiKey { get; set; } = string.Empty;
+        }
 
 
         /// <summary>

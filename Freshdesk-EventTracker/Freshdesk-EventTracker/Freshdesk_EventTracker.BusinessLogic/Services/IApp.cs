@@ -6,7 +6,12 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
 {
     public interface IApp
     {
-       Task RunAppAsync();
+       Task RunAppAsync(string apiKey,
+            string freshdeskUrl,
+            string proffixUrl,
+            string proffixUser,
+            string proffixPassword,
+            string database);
 
       
     }

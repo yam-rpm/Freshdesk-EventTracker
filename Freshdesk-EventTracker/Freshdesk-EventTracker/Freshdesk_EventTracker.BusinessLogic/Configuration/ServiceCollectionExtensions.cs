@@ -8,7 +8,7 @@ namespace Freshdesk_EventTracker.BusinessLogic.Configuration
     {
         public static IServiceCollection AddBusinessLogic(this IServiceCollection services, IConfiguration configuration, string mandantName, int mandantIndex, IServiceCollection serviceCollectionHolder)
         {
-            services.AddScoped<ITestService, TestService>();
+            
 
             /*
                 // Zweck: DI für Konfigurationsobjekte um Options-Klassen mit Daten aus appsettings.json oder anderen Quellen zu befüllen

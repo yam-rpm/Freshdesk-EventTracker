@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 
-namespace ConsoleSolution1.Services
+namespace Freshdesk_EventTracker.Services
 {
     public interface IConfigurationReloadService
     {

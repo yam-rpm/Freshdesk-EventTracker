@@ -3,7 +3,7 @@ using Freshdesk_EventTracker.BusinessLogic.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ConsoleSolution1.Services
+namespace Freshdesk_EventTracker.Services
 {
     /// <summary>
     ///     Extension methods for <see cref="IServiceCollection"/> to add tenant-specific configuration and related services.
@@ -12,7 +12,11 @@ namespace ConsoleSolution1.Services
     {
         public static IServiceCollection AddMandantenConfiguration(this IServiceCollection services, IConfiguration configuration, IServiceCollection serviceCollectionHolder)
         {
-            services.AddScoped<ITestService, TestService>();
+            services.AddHttpClient<IApiClient, ApiClient>(client =>
+            {
+                client.BaseAddress = new Uri("");
+
+            });
 
             /*
                 // Zweck: DI für Konfigurationsobjekte um Options-Klassen mit Daten aus appsettings.json oder anderen Quellen zu befüllen
