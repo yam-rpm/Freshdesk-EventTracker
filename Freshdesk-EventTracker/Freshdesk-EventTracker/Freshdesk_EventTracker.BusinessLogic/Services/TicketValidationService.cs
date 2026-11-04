@@ -31,20 +31,66 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
             _logger?.LogInformation("Starting ticket validation run.");
 
             // Read Freshdesk tickets and Proffix reports.
-            var tickets = await _freshdesk.GetAllTicketsRawAsync();
+            List<JsonElement> tickets;
+            try
+            {
+                tickets = await _freshdesk.GetAllTicketsRawAsync();
+            }
+            catch (HttpRequestException exception)
+            {
+                _logger?.LogError(
+                    exception,
+                    "Freshdesk ticket retrieval failed.");
+                throw;
+            }
+            catch (JsonException exception)
+            {
+                _logger?.LogError(
+                    exception,
+                    "Freshdesk returned invalid ticket data.");
+                throw;
+            }
+
             _logger?.LogInformation("Fetched {TicketCount} Freshdesk tickets.", tickets.Count);
+            if (tickets.Count == 0)
+                _logger?.LogWarning("Freshdesk returned no tickets to validate.");
 
             const int pageSize = 10000;
             var reports = new List<JsonElement>();
             for (int offset = 0; ; offset += pageSize)
             {
-                string rapportJson = await _proffix.GetAllRapporte(
-                    offset,
-                    pageSize);
+                string rapportJson;
+                try
+                {
+                    rapportJson = await _proffix.GetAllRapporte(
+                        offset,
+                        pageSize);
+                }
+                catch (HttpRequestException exception)
+                {
+                    _logger?.LogError(
+                        exception,
+                        "Proffix report retrieval failed at offset {Offset}.",
+                        offset);
+                    throw;
+                }
 
-                using var rapportDocument = JsonDocument.Parse(rapportJson);
-                List<JsonElement> pageReports = GetReportObjects(
-                    rapportDocument.RootElement).ToList();
+                List<JsonElement> pageReports;
+                try
+                {
+                    using var rapportDocument = JsonDocument.Parse(rapportJson);
+                    pageReports = GetReportObjects(
+                        rapportDocument.RootElement).ToList();
+                }
+                catch (JsonException exception)
+                {
+                    _logger?.LogError(
+                        exception,
+                        "Proffix report data was invalid at offset {Offset}.",
+                        offset);
+                    throw;
+                }
+
                 reports.AddRange(pageReports);
 
                 if (pageReports.Count < pageSize)
@@ -52,22 +98,55 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
             }
 
             _logger?.LogInformation("Fetched {ReportCount} Proffix report entries.", reports.Count);
+            if (reports.Count == 0)
+                _logger?.LogWarning("Proffix returned no reports to compare.");
 
             foreach (var ticket in tickets)
             {
                 int ticketId = GetInt(ticket, "id");
 
                 if (ticketId == 0)
+                {
+                    _logger?.LogWarning(
+                        "Skipping Freshdesk ticket without a valid ticket ID.");
                     continue;
+                }
 
                 int customerId = GetInt(ticket, "requester_id");
 
                 string addressNumber = GetCustomField(
                     ticket, "cf_adressnrpx", "AdressNrPX");
 
-                var conversations =
-                    await _freshdesk.GetTicketConversationsRawAsync(
+                List<JsonElement> conversations;
+                try
+                {
+                    conversations =
+                        await _freshdesk.GetTicketConversationsRawAsync(
+                            ticketId);
+                }
+                catch (HttpRequestException exception)
+                {
+                    _logger?.LogError(
+                        exception,
+                        "Freshdesk conversation retrieval failed for ticket {TicketId}.",
                         ticketId);
+                    throw;
+                }
+                catch (JsonException exception)
+                {
+                    _logger?.LogError(
+                        exception,
+                        "Freshdesk returned invalid conversations for ticket {TicketId}.",
+                        ticketId);
+                    throw;
+                }
+
+                if (conversations.Count == 0)
+                {
+                    _logger?.LogWarning(
+                        "Freshdesk ticket {TicketId} has no conversations.",
+                        ticketId);
+                }
 
                 foreach (var conversation in conversations)
                 {
@@ -75,7 +154,12 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
                     int agentId = GetInt(conversation, "user_id");
 
                     if (agentId == 0)
+                    {
+                        _logger?.LogWarning(
+                            "Skipping a conversation on ticket {TicketId} without a valid user ID.",
+                            ticketId);
                         continue;
+                    }
 
                     // Only validate agent-created replies and notes.
                     bool isPrivate = GetBool(conversation, "private");
@@ -101,6 +185,8 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
             _logger?.LogInformation(
                 "Validation run finished with {ResultCount} result entries.",
                 results.Count);
+            if (results.Count == 0)
+                _logger?.LogWarning("Validation completed without any interactions to report.");
 
             return results;
         }

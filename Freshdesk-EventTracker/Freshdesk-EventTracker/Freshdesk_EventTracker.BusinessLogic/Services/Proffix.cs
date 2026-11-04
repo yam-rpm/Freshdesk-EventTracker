@@ -259,10 +259,11 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger?.LogError(
-                        "Proffix validation write {RecordNumber} of {RecordCount} failed with {StatusCode}.",
+                        "Proffix validation write {RecordNumber} of {RecordCount} failed with {StatusCode}; {CompletedCount} earlier records may already have been written.",
                         index + 1,
                         records.Count,
-                        response.StatusCode);
+                        response.StatusCode,
+                        index);
                 }
 
                 response.EnsureSuccessStatusCode();

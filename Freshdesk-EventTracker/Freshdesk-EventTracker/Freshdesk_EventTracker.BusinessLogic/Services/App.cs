@@ -34,6 +34,7 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
             var proffix = new ProffixService(
                 proffixUrl,
                 _logger);
+            Exception? operationFailure = null;
 
             try
             {
@@ -66,7 +67,13 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
                         $"Result: {result.ResultTag} | " +
                         $"{result.ResultText}";
 
-                    _logger.LogInformation(message);
+                    _logger.LogInformation(
+                        "Ticket {TicketId} | Agent {AgentId} | Type {InteractionType} | Result {ResultTag} | {ResultText}",
+                        result.TicketId,
+                        result.AgentId,
+                        result.InteractionType,
+                        result.ResultTag,
+                        result.ResultText);
                     Console.WriteLine(message);
                 }
 
@@ -96,11 +103,26 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
                         "Proffix custom-table writing is disabled via configuration.");
                 }
             }
+            catch (Exception exception)
+            {
+                operationFailure = exception;
+                _logger.LogError(exception, "Validation run failed.");
+                throw;
+            }
             finally
             {
-                await proffix.LogoutAsync();
-                _logger.LogInformation("Proffix session closed.");
-                Console.WriteLine("Proffix session closed.");
+                try
+                {
+                    await proffix.LogoutAsync();
+                    _logger.LogInformation("Proffix session closed.");
+                    Console.WriteLine("Proffix session closed.");
+                }
+                catch (Exception logoutException) when (operationFailure is not null)
+                {
+                    _logger.LogError(
+                        logoutException,
+                        "Failed to close Proffix session after the validation run already failed.");
+                }
             }
         }
     }
