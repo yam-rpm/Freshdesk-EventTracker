@@ -26,8 +26,9 @@ namespace Freshdesk_EventTracker
             {
                 config.AddJsonFile(
                     "appsettings.json",
-                    optional: false,
-                    reloadOnChange: true);
+                    optional: true,
+                    reloadOnChange: true)
+                    .AddEnvironmentVariables();
             });
 
             using IHost tempHost = builder.Build();
@@ -46,8 +47,20 @@ namespace Freshdesk_EventTracker
 
                 var app = finalHost.Services.GetRequiredService<IApp>();
 
-                await app.RunAppAsync(configuration["Freshdesk:ApiKey"], configuration["Freshdesk:BaseUrl"], configuration["Proffix:BaseUrl"],"YAM", "d353fb7a5f5b83cb82ebc17e22bdecd8f431ec38eef6435070586b89f4edf8c9", "rpminformatikGmbH");
-                
+                var freshdeskApiKey = RequireValue(configuration, "Freshdesk:ApiKey");
+                var freshdeskBaseUrl = RequireBaseUrl(configuration, "Freshdesk:BaseUrl");
+                var proffixBaseUrl = RequireBaseUrl(configuration, "Proffix:BaseUrl");
+                var proffixUser = RequireValue(configuration, "Proffix:User");
+                var proffixPassword = RequireValue(configuration, "Proffix:Password");
+                var proffixDatabase = RequireValue(configuration, "Proffix:Database");
+
+                await app.RunAppAsync(
+                    freshdeskApiKey,
+                    freshdeskBaseUrl,
+                    proffixBaseUrl,
+                    proffixUser,
+                    proffixPassword,
+                    proffixDatabase);
 
                 _logger?.LogInformation("Console App wurde beendet.");
             }
@@ -131,6 +144,36 @@ namespace Freshdesk_EventTracker
             });
 
             _logger = factory.CreateLogger("EarlyLogger");
+        }
+
+        private static string RequireValue(
+            IConfiguration configuration,
+            string key)
+        {
+            string? value = configuration[key];
+
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidOperationException(
+                    $"Missing required configuration value '{key}'.");
+
+            return value;
+        }
+
+        private static string RequireBaseUrl(
+            IConfiguration configuration,
+            string key)
+        {
+            string value = RequireValue(configuration, key);
+
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttps &&
+                 uri.Scheme != Uri.UriSchemeHttp))
+            {
+                throw new InvalidOperationException(
+                    $"Configuration value '{key}' must be an absolute HTTP or HTTPS URL.");
+            }
+
+            return uri.ToString().TrimEnd('/');
         }
     }
 }

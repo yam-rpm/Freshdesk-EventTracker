@@ -413,4 +413,5 @@ obj/
 vendor/
 
 *.settings.json
+**/appsettings.json
 # End of https://www.toptal.com/developers/gitignore/api/csharp,dotnetcore,jsonnet
