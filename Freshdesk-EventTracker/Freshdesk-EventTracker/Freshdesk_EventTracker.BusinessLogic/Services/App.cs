@@ -1,61 +1,44 @@
 ﻿using Freshdesk_EventTracker.BusinessLogic.Services;
 using Freshdesk_Ticket_Viewer.Shared.Dto;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace Freshdesk_EventTracker.BusinessLogic.Services
 {
-
-    //    public class App : IApp
-    //    {
-    //        public async Task RunAppAsync(string API_KEY)
-    //        {
-    //            var freshdeskService = new FreshdeskService(
-    //                    $"{API_KEY}",
-    //                    "https://rpmit.freshdesk.com/api"
-    //                );
-
-
-    //            List<Ticket> tickets = await freshdeskService.GetAllTickets();
-
-    //            foreach (var ticket in tickets)
-    //            {
-    //                Console.WriteLine(ticket);
-    //            }
-
-    //            var Proffix = new ProffixService("https://remote.rpm-it.ch:9443");
-
-    //            var user = "";
-    //            var password = "";
-    //            var database = "";
-
-    //            string[] modules = { "ZEI", "STU", "ADR" };
-
-    //            await Proffix.LoginAsync(user, password, database, modules);
-    //        }
-
-    //    }
-
     public class App : IApp
     {
+        private readonly ILogger<App> _logger;
+
+        public App(ILogger<App> logger)
+        {
+            _logger = logger;
+        }
+
         public async Task RunAppAsync(
             string apiKey,
             string freshdeskUrl,
             string proffixUrl,
             string proffixUser,
             string proffixPassword,
-            string database)
+            string database,
+            string? customTableRoute = null,
+            bool writeValidationResults = false)
         {
             var freshdesk = new FreshdeskService(
                 apiKey,
-                freshdeskUrl);
+                freshdeskUrl,
+                _logger);
 
-            var proffix = new ProffixService(proffixUrl);
+            var proffix = new ProffixService(
+                proffixUrl,
+                _logger);
 
             try
             {
+                _logger.LogInformation("Proffix Login...");
                 Console.WriteLine("Proffix Login...");
 
                 await proffix.LoginAsync(
@@ -64,39 +47,63 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
                     database,
                     new[] { "VOL" });
 
+                _logger.LogInformation("Login successful.");
                 Console.WriteLine("Login successful.");
-                Console.WriteLine("Starting read-only validation...");
+                Console.WriteLine("Starting validation...");
 
                 var validator = new TicketValidationService(
                     freshdesk,
-                    proffix);
+                    proffix,
+                    _logger);
 
                 var results = await validator.ValidateAsync();
 
                 foreach (var result in results)
                 {
-                    Console.WriteLine(
+                    var message =
                         $"Ticket: {result.TicketId} | " +
                         $"Agent: {result.AgentId} | " +
                         $"Type: {result.InteractionType} | " +
                         $"Result: {result.ResultTag} | " +
-                        $"{result.ResultText}");
+                        $"{result.ResultText}";
+
+                    _logger.LogInformation(message);
+                    Console.WriteLine(message);
                 }
 
                 Console.WriteLine();
                 Console.WriteLine($"Interactions checked: {results.Count}");
                 Console.WriteLine(
-                    $"OK: {results.Count(r => r.ResultTag == "OK")}");
+                    $"OK: {results.Count(r => r.ResultTag == ValidationResultTags.Match)}");
                 Console.WriteLine(
-                    $"Fail: {results.Count(r => r.ResultTag == "Fail")}");
+                    $"No match: {results.Count(r => r.ResultTag == ValidationResultTags.NoMatch)}");
                 Console.WriteLine(
-                    $"Unclear: {results.Count(r => r.ResultTag == "Unklar")}");
+                    $"Partial or unclear: {results.Count(r =>
+                        r.ResultTag != ValidationResultTags.Match &&
+                        r.ResultTag != ValidationResultTags.NoMatch)}");
 
-                // No Proffix write operation is performed.
+                if (writeValidationResults)
+                {
+                    var targetRoute = customTableRoute ?? "/pxapi/v4/ZUS/TicketLeistVali";
+                    _logger.LogInformation(
+                        "Writing {Count} validation results to Proffix custom table '{Route}'.",
+                        results.Count,
+                        targetRoute);
+
+                    await proffix.WriteValidationResultsAsync(
+                        results,
+                        targetRoute);
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Proffix custom-table writing is disabled via configuration.");
+                }
             }
             finally
             {
                 await proffix.LogoutAsync();
+                _logger.LogInformation("Proffix session closed.");
                 Console.WriteLine("Proffix session closed.");
             }
         }

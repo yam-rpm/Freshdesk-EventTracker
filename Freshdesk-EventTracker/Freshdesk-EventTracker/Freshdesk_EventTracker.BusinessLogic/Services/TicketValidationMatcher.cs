@@ -6,14 +6,6 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
 {
     public static class TicketValidationMatcher
     {
-        private const string MatchTag = "OK";
-        private const string NoMatchTag = "Keine Treffer";
-        private const string CustomerOnlyTag = "Treffer nur Kunde";
-        private const string AgentOnlyTag = "Treffer nur Mitarbeiter";
-        private const string TicketOnlyTag = "Treffer nur Ticket";
-        private const string AmbiguousTag = "Unklar";
-        private const string MultipleMatchesTag = "Mehrere Treffer";
-
         public static ValidationResult Match(
             int ticketId,
             int agentId,
@@ -51,14 +43,14 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
 
             if (matchingReports.Count == 1)
             {
-                result.ResultTag = MatchTag;
+                result.ResultTag = ValidationResultTags.Match;
                 result.ResultText =
                     "Ticket, Mitarbeiter, Kunde und Datum stimmen mit " +
                     "einer Proffix-Leistung überein.";
             }
             else if (matchingReports.Count > 1)
             {
-                result.ResultTag = MultipleMatchesTag;
+                result.ResultTag = ValidationResultTags.MultipleMatches;
                 result.ResultText =
                     "Mehrere Proffix-Leistungen stimmen mit allen Kriterien überein.";
             }
@@ -66,34 +58,34 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
                      agentReports.Count == 0 &&
                      customerReports.Count == 0)
             {
-                result.ResultTag = NoMatchTag;
+                result.ResultTag = ValidationResultTags.NoMatch;
                 result.ResultText =
                     "Weder Ticketnummer, Mitarbeiter noch Kunde wurden in den Proffix-Leistungen gefunden.";
             }
             else if (ticketReports.Count == 0 &&
                      agentReports.Count == 0)
             {
-                result.ResultTag = CustomerOnlyTag;
+                result.ResultTag = ValidationResultTags.CustomerOnly;
                 result.ResultText =
                     "Kunde gefunden, aber keine passende Ticketnummer oder Mitarbeiterzuordnung.";
             }
             else if (ticketReports.Count == 0 &&
                      customerReports.Count == 0)
             {
-                result.ResultTag = AgentOnlyTag;
+                result.ResultTag = ValidationResultTags.AgentOnly;
                 result.ResultText =
                     "Mitarbeiter gefunden, aber keine passende Ticketnummer oder Kundenzuordnung.";
             }
             else if (agentReports.Count == 0 &&
                      customerReports.Count == 0)
             {
-                result.ResultTag = TicketOnlyTag;
+                result.ResultTag = ValidationResultTags.TicketOnly;
                 result.ResultText =
                     "Ticketnummer gefunden, aber keine passende Mitarbeiter- oder Kundenzuordnung.";
             }
             else
             {
-                result.ResultTag = AmbiguousTag;
+                result.ResultTag = ValidationResultTags.Ambiguous;
                 result.ResultText = DescribePartialMatch(
                     ticketReports.Count > 0,
                     agentReports.Count > 0,
