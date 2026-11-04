@@ -24,7 +24,6 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
             string proffixUser,
             string proffixPassword,
             string database,
-            string? customTableRoute = null,
             bool writeValidationResults = false)
         {
             var freshdesk = new FreshdeskService(
@@ -84,15 +83,12 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
 
                 if (writeValidationResults)
                 {
-                    var targetRoute = customTableRoute ?? "/pxapi/v4/ZUS/TicketLeistVali";
                     _logger.LogInformation(
-                        "Writing {Count} validation results to Proffix custom table '{Route}'.",
-                        results.Count,
-                        targetRoute);
+                        "Writing {Count} validation results to the fixed Proffix validation table.",
+                        results.Count);
 
                     await proffix.WriteValidationResultsAsync(
-                        results,
-                        targetRoute);
+                        results);
                 }
                 else
                 {

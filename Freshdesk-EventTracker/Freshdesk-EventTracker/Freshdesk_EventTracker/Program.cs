@@ -53,6 +53,13 @@ namespace Freshdesk_EventTracker
                 var proffixUser = RequireValue(configuration, "Proffix:User");
                 var proffixPassword = RequireValue(configuration, "Proffix:Password");
                 var proffixDatabase = RequireValue(configuration, "Proffix:Database");
+                string writeSetting =
+                    configuration["Proffix:WriteValidationResults"] ?? "false";
+                if (!bool.TryParse(writeSetting, out bool writeValidationResults))
+                {
+                    throw new InvalidOperationException(
+                        "Configuration value 'Proffix:WriteValidationResults' must be true or false.");
+                }
 
                 await app.RunAppAsync(
                     freshdeskApiKey,
@@ -60,7 +67,8 @@ namespace Freshdesk_EventTracker
                     proffixBaseUrl,
                     proffixUser,
                     proffixPassword,
-                    proffixDatabase);
+                    proffixDatabase,
+                    writeValidationResults);
 
                 _logger?.LogInformation("Console App wurde beendet.");
             }

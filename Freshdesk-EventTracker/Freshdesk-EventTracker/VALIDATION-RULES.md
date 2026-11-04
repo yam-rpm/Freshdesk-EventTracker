@@ -29,3 +29,17 @@ These names and the assumption that `Z_FreshdeskID` maps to the Freshdesk
 conversation `user_id` have not been verified against a live Proffix schema.
 Confirm the actual field names, employee mapping, date rules, and meaning of
 private conversations with the Proffix owner before production use.
+
+## Optional persistence
+
+Validation writes are disabled unless `Proffix:WriteValidationResults` is set
+to `true` (or `Proffix__WriteValidationResults=true` is supplied as an
+environment variable). When enabled, the application sends one record at a
+time to the fixed `ZUS/TicketLeistVali` route. A failed write is reported and
+stops the batch; earlier records in that batch may already have been written.
+The operation is not idempotent and can create duplicates if a run is repeated.
+
+The target table's field names, accepted JSON schema, and duplicate-handling
+policy have not been verified against a Proffix system. Keep writes disabled
+until the Proffix owner confirms those details and approves a controlled
+end-to-end test.

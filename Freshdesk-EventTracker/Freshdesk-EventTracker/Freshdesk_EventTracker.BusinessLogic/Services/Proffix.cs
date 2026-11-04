@@ -14,6 +14,8 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
     public class ProffixService : IDisposable
     {
         private const int MaximumReportPageSize = 10000;
+        private const string ValidationTableRoute =
+            "/pxapi/v4/ZUS/TicketLeistVali";
         private static readonly HttpClient SharedClient = new();
 
         private readonly string _baseUrl;
@@ -215,11 +217,9 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
         }
 
         public async Task WriteValidationResultsAsync(
-            IEnumerable<ValidationResult> results,
-            string tableRoute = "/pxapi/v4/ZUS/TicketLeistVali")
+            IEnumerable<ValidationResult> results)
         {
-            if (results is null)
-                throw new ArgumentNullException(nameof(results));
+            ArgumentNullException.ThrowIfNull(results);
 
             if (string.IsNullOrWhiteSpace(_pxSessionId))
                 throw new InvalidOperationException(
@@ -242,50 +242,35 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
                 return;
             }
 
-            var payloadCandidates = new object[]
+            string requestUri = $"{_baseUrl}{ValidationTableRoute}";
+            for (int index = 0; index < records.Count; index++)
             {
-                new { records = records },
-                new { items = records },
-                records
-            };
-
-            foreach (var payload in payloadCandidates)
-            {
-                var requestUri = $"{_baseUrl.TrimEnd('/')}{tableRoute.TrimStart('/')}";
-                var json = JsonSerializer.Serialize(payload);
-
-                using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
+                string json = JsonSerializer.Serialize(records[index]);
+                using var request = new HttpRequestMessage(
+                    HttpMethod.Post,
+                    requestUri);
                 request.Headers.Add("PxSessionId", _pxSessionId);
-                request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+                request.Content = new StringContent(
+                    json,
+                    Encoding.UTF8,
+                    "application/json");
 
                 using var response = await _client.SendAsync(request);
-
-                if (response.IsSuccessStatusCode)
+                if (!response.IsSuccessStatusCode)
                 {
-                    _logger?.LogInformation(
-                        "Successfully wrote {Count} validation results to Proffix custom table '{Route}'.",
+                    _logger?.LogError(
+                        "Proffix validation write {RecordNumber} of {RecordCount} failed with {StatusCode}.",
+                        index + 1,
                         records.Count,
-                        tableRoute);
-                    return;
-                }
-
-                _logger?.LogWarning(
-                    "Proffix custom table write failed with {StatusCode} for payload shape {PayloadType}.",
-                    response.StatusCode,
-                    payload.GetType().Name);
-
-                if (response.StatusCode == System.Net.HttpStatusCode.BadRequest ||
-                    response.StatusCode == System.Net.HttpStatusCode.NotFound ||
-                    response.StatusCode == System.Net.HttpStatusCode.UnsupportedMediaType)
-                {
-                    continue;
+                        response.StatusCode);
                 }
 
                 response.EnsureSuccessStatusCode();
             }
 
-            throw new InvalidOperationException(
-                $"Unable to write validation results to Proffix custom table '{tableRoute}'.");
+            _logger?.LogInformation(
+                "Successfully wrote {Count} validation results to the Proffix validation table.",
+                records.Count);
         }
 
         public void Dispose()
