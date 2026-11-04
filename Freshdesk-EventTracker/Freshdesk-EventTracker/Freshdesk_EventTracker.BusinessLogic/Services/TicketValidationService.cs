@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-
+﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -16,32 +12,46 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
     {
         private readonly FreshdeskService _freshdesk;
         private readonly ProffixService _proffix;
+        private readonly ILogger? _logger;
 
         public TicketValidationService(
             FreshdeskService freshdesk,
-            ProffixService proffix)
+            ProffixService proffix,
+            ILogger? logger = null)
         {
             _freshdesk = freshdesk;
             _proffix = proffix;
+            _logger = logger;
         }
 
         public async Task<List<ValidationResult>> ValidateAsync()
         {
             var results = new List<ValidationResult>();
 
-           
+            _logger?.LogInformation("Starting ticket validation run.");
+
             // Read Freshdesk tickets and Proffix reports.
             var tickets = await _freshdesk.GetAllTicketsRawAsync();
+            _logger?.LogInformation("Fetched {TicketCount} Freshdesk tickets.", tickets.Count);
 
-            string rapportJson = await _proffix.GetAllRapporte(
-                offset: 0,
-                limit: 10000);
+            const int pageSize = 10000;
+            var reports = new List<JsonElement>();
+            for (int offset = 0; ; offset += pageSize)
+            {
+                string rapportJson = await _proffix.GetAllRapporte(
+                    offset,
+                    pageSize);
 
-            using var rapportDocument =
-                JsonDocument.Parse(rapportJson);
+                using var rapportDocument = JsonDocument.Parse(rapportJson);
+                List<JsonElement> pageReports = GetReportObjects(
+                    rapportDocument.RootElement).ToList();
+                reports.AddRange(pageReports);
 
-            var reports = GetReportObjects(
-                rapportDocument.RootElement).ToList();
+                if (pageReports.Count < pageSize)
+                    break;
+            }
+
+            _logger?.LogInformation("Fetched {ReportCount} Proffix report entries.", reports.Count);
 
             foreach (var ticket in tickets)
             {
@@ -76,61 +86,21 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
                     DateTime? interactionDate = GetDate(
                         conversation, "created_at");
 
-                    // Find reports mentioning the ticket number.
-                    var ticketReports = reports
-                        .Where(report => MentionsTicket(
-                            report, ticketId))
-                        .ToList();
-
-                    // Match the agent and customer.
-                    var matchingReports = ticketReports
-                        .Where(report =>
-                            ReportAgentMatches(report, agentId))
-                        .Where(report =>
-                            CustomerMatches(report, addressNumber))
-                        .Where(report =>
-                            DateMatches(report, interactionDate))
-                        .ToList();
-
-                    var result = new ValidationResult
-                    {
-                        TicketId = ticketId,
-                        AgentId = agentId,
-                        InteractionType = interactionType,
-                        InteractionDate = interactionDate,
-                        MatchingReports = matchingReports.Count
-                    };
-
-                    if (matchingReports.Count == 1)
-                    {
-                        result.ResultTag = "OK";
-                        result.ResultText =
-                            "Ticket, Agent, Kunde und Datum stimmen " +
-                            "mit einer Proffix-Leistung überein.";
-                    }
-                    else if (matchingReports.Count > 1)
-                    {
-                        result.ResultTag = "Unklar";
-                        result.ResultText =
-                            "Mehrere passende Proffix-Leistungen gefunden.";
-                    }
-                    else if (ticketReports.Count == 0)
-                    {
-                        result.ResultTag = "Fail";
-                        result.ResultText =
-                            "Keine Proffix-Leistung mit dieser Ticketnummer gefunden.";
-                    }
-                    else
-                    {
-                        result.ResultTag = "Unklar";
-                        result.ResultText =
-                            "Ticketnummer gefunden, aber Agent, Kunde " +
-                            "oder Datum stimmt nicht eindeutig überein.";
-                    }
+                    var result = TicketValidationMatcher.Match(
+                        ticketId,
+                        agentId,
+                        addressNumber,
+                        interactionType,
+                        interactionDate,
+                        reports);
 
                     results.Add(result);
                 }
             }
+
+            _logger?.LogInformation(
+                "Validation run finished with {ResultCount} result entries.",
+                results.Count);
 
             return results;
         }
@@ -158,63 +128,13 @@ namespace Freshdesk_EventTracker.BusinessLogic.Services
                         yield break;
                     }
                 }
+
+                throw new JsonException(
+                    "Proffix report response object did not contain an array.");
             }
-        }
 
-        private static bool MentionsTicket(
-            JsonElement report, int ticketId)
-        {
-            string ticket = ticketId.ToString();
-
-            string ticketField = GetString(
-                report, "Z_Ticket", "Z_Ticket.Value");
-
-            string remarks = GetString(
-                report, "Bemerkungen", "Bemerkung");
-
-            return ticketField == ticket ||
-                (!string.IsNullOrWhiteSpace(remarks) &&
-                 System.Text.RegularExpressions.Regex.IsMatch(
-                     remarks,
-                     $@"(?<!\d){System.Text.RegularExpressions.Regex.Escape(ticket)}(?!\d)"));
-        }
-
-        private static bool ReportAgentMatches(
-            JsonElement report, int agentId)
-        {
-            // Replace these with the actual Proffix employee
-            // field and its Z_FreshdeskID mapping.
-            string value = GetString(
-                report, "Z_FreshdeskID", "FreshdeskAgentId");
-
-            return int.TryParse(value, out int mappedAgentId)
-                && mappedAgentId == agentId;
-        }
-
-        private static bool CustomerMatches(
-            JsonElement report, string addressNumber)
-        {
-            if (string.IsNullOrWhiteSpace(addressNumber))
-                return false;
-
-            string reportAddress = GetString(
-                report, "AdressNrPX", "AdressNr", "Adressnummer");
-
-            return !string.IsNullOrWhiteSpace(reportAddress)
-                && reportAddress == addressNumber;
-        }
-
-        private static bool DateMatches(
-            JsonElement report, DateTime? interactionDate)
-        {
-            if (interactionDate == null)
-                return false;
-
-            DateTime? reportDate = GetDate(
-                report, "Datum", "Date", "Rapportdatum");
-
-            return reportDate.HasValue &&
-                reportDate.Value.Date == interactionDate.Value.Date;
+            throw new JsonException(
+                "Proffix report response must be an array or an object containing an array.");
         }
 
         private static string GetCustomField(
